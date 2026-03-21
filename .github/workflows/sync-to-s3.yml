@@ -1,0 +1,36 @@
+name: sync-knowledge-to-s3
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  S3_BUCKET: hwhub-stg-knowledge
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::564323392873:role/gh-actions-hwhub-knowledge
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync to S3
+        run: |
+          aws s3 sync . "s3://${S3_BUCKET}/" \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "README.md" \
+            --delete
+          echo "Synced to s3://${S3_BUCKET}/"
