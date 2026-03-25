@@ -10,7 +10,8 @@
 ## Overview
 
 Housework Hub（HwHub）は、家庭内の家事・買い物・メンバー管理を協調的に行うためのアプリケーションです。  
-複数のおうち（Household）をサポートし、家事タスクのテンプレート化、定期実行、担当者割当、履歴管理などを提供します。
+複数のおうち（Household）をサポートし、家事タスクのテンプレート化、定期実行、担当者割当、履歴管理などを提供します。  
+ユーザーからの問い合わせには Claude API を活用した AI 自動返信機能を備えており、解決できない場合はサポートスタッフへのエスカレーションも可能です。
 
 本リポジトリ群は以下の構成で成り立っています。
 
@@ -60,7 +61,7 @@ flowchart LR
     ECSBatch["ECS (Batch Task)"]
     RDS["RDS (MySQL)"]
     S3Knowledge["S3 (Knowledge)"]
-    ClaudeAPI["Claude API"]
+    ClaudeAPI["Anthropic Claude API"]
     Scheduler --> ECSBatch
     ECSBatch --> RDS
     ECSBatch --> S3Knowledge
@@ -69,11 +70,108 @@ flowchart LR
 
 ---
 
+## Support Flow（問い合わせサポートフロー）
+
+ユーザーが問い合わせを起票してからクローズするまでのフローです。  
+AI による自動返信を一次対応とし、解決できない場合はサポートスタッフにエスカレーションします。  
+ナレッジベースは `hw-hub-knowledge` リポジトリで管理し、main へのマージで S3 に自動同期されます。
+
+### シーケンス図
+
+```mermaid
+sequenceDiagram
+    actor User as ユーザー
+    participant API as Backend API
+    participant DB as RDS (MySQL)
+    participant Batch as AI返信バッチ
+    participant S3 as S3 (Knowledge)
+    participant Claude as Anthropic Claude API
+    actor Staff as サポートスタッフ
+
+    User->>API: 問い合わせ作成 (POST /api/inquiries)
+    API->>DB: t_inquiry 登録 (status=OPEN)
+    API-->>User: 201 Created
+
+    Note over Batch: EventBridge Scheduler<br/>毎時45分に起動
+
+    Batch->>DB: OPEN の問い合わせを取得
+    Batch->>S3: faq.md / howto.md を取得
+    Batch->>Claude: 問い合わせ内容 + ナレッジを送信
+    Claude-->>Batch: AI回答テキスト
+    Batch->>DB: t_inquiry_message 登録 (sender_type=AI)
+    Batch->>DB: t_inquiry 更新 (status=AI_ANSWERED)
+    Batch->>DB: t_notification 登録（ユーザーへ通知）
+
+    User->>API: 問い合わせ詳細確認
+    API->>DB: メッセージスレッド取得
+    API-->>User: AI回答を表示
+
+    alt AI回答で解決した場合
+        User->>API: クローズ (POST /api/inquiries/{id}/close)
+        API->>DB: t_inquiry 更新 (status=CLOSED)
+        API-->>User: 200 OK
+    else AI回答で解決しなかった場合
+        User->>API: エスカレーション (POST /api/inquiries/{id}/escalate)
+        API->>DB: t_inquiry 更新 (status=PENDING_STAFF)
+        API-->>User: 200 OK
+
+        Staff->>API: 対応待ち一覧確認 (GET /api/admin/inquiries)
+        API->>DB: PENDING_STAFF 一覧取得
+        API-->>Staff: 問い合わせ一覧
+
+        Staff->>API: スタッフ返信 (POST /api/admin/inquiries/{id}/reply)
+        API->>DB: t_inquiry_message 登録 (sender_type=STAFF)
+        API->>DB: t_inquiry 更新 (status=STAFF_ANSWERED)
+        API->>DB: t_notification 登録（ユーザーへ通知）
+        API-->>Staff: 200 OK
+
+        User->>API: 返信確認 → クローズ
+        API->>DB: t_inquiry 更新 (status=CLOSED)
+        API-->>User: 200 OK
+    end
+```
+
+### ステータス遷移
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> OPEN : 問い合わせ作成
+
+    OPEN --> AI_ANSWERED : AI返信バッチ実行
+
+    AI_ANSWERED --> CLOSED : ユーザーがクローズ
+    AI_ANSWERED --> PENDING_STAFF : ユーザーがエスカレーション
+
+    PENDING_STAFF --> STAFF_ANSWERED : スタッフが返信
+    STAFF_ANSWERED --> CLOSED : ユーザーがクローズ
+    STAFF_ANSWERED --> PENDING_STAFF : ユーザーが追加返信
+
+    CLOSED --> [*]
+```
+
+### ナレッジ管理フロー
+
+```mermaid
+flowchart LR
+    Repo["hw-hub-knowledge\n(faq.md / howto.md)"]
+    Actions["GitHub Actions\n(main push)"]
+    S3["S3\n(hwhub-knowledge)"]
+    Batch["AI返信バッチ"]
+
+    Repo -->|"aws s3 sync"| Actions
+    Actions --> S3
+    S3 -->|"GetObject"| Batch
+```
+
+---
+
 ## Tech stack
 
 ### Backend
 - Java 21
-- Spring Boot 4.x
+- Spring Boot 4.0.X ※3.5.Xからバージョンアップ済み
 - MyBatis + MyBatis Generator
 - Flyway
 - MySQL
@@ -96,6 +194,7 @@ flowchart LR
 - **Terraform**
 
 ---
+
 ## Repository Structure
 
 | Repository | Role |
@@ -130,7 +229,6 @@ Infra --> Batch
 ```
 
 ---
-
 
 ## CI / CD 概要
 
@@ -273,7 +371,6 @@ Planned improvements:
 
 - mobile application (Capacitor)
 - analytics dashboard
-- expanded multi-language support
 
 ---
 
@@ -281,5 +378,7 @@ Planned improvements:
 
 - architecture established
 - CI/CD pipeline implemented
+- AI-powered inquiry support implemented (Claude API)
+- role-based admin panel implemented
 - high test coverage achieved
 - infrastructure managed via Terraform
