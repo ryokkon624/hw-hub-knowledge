@@ -292,6 +292,214 @@ terraform destroy
 
 ---
 
+## Local Development Setup
+
+ローカル環境でアプリケーションを起動するための手順です。
+
+### 前提条件
+
+以下がインストールされていること。
+
+- JDK 21
+- Node.js 18+
+- Docker / Docker Compose
+- VS Code（推奨）または IntelliJ IDEA
+
+---
+
+### 1. リポジトリのクローン
+
+```bash
+# 各リポジトリを同一の親ディレクトリ配下にクローンすることを推奨
+mkdir hw-hub
+cd hw-hub
+
+git clone https://github.com/ryokkon624/hw-hub-database.git
+git clone https://github.com/ryokkon624/hw-hub-backend.git
+git clone https://github.com/ryokkon624/hw-hub-frontend.git
+# バッチを実行する場合
+git clone https://github.com/ryokkon624/hw-hub-batch.git
+# AI返信バッチを使う場合
+git clone https://github.com/ryokkon624/hw-hub-knowledge.git
+```
+
+---
+
+### 2. データベースの起動と初期化
+
+```bash
+cd hw-hub-database
+
+# MySQL コンテナを起動
+docker compose up -d
+
+# Flyway マイグレーション実行
+./gradlew flywayMigrate
+
+# テストデータの投入
+./gradlew seedDevData
+```
+
+---
+
+### 3. AI 返信ナレッジのアップロード（オプション）
+
+AI 返信バッチを動かす場合のみ必要です。
+
+```bash
+cd hw-hub-backend
+
+# faq.md / howto.md を hw-hub-knowledge からコピー
+cp ../hw-hub-knowledge/faq.md localstack/init/faq.md
+cp ../hw-hub-knowledge/howto.md localstack/init/howto.md
+```
+
+LocalStack 起動時（手順4）に自動でアップロードされます。
+
+---
+
+### 4. Backend の環境設定
+
+```bash
+cd hw-hub-backend
+
+# LocalStack（S3）・Mailhog（メール）を起動
+docker compose up -d
+```
+
+プロジェクトルートに `.env` ファイルを作成してください。  
+`.env.example` をコピーして必要な値を設定します。
+
+```bash
+cp .env.example .env
+```
+
+`.env` の設定内容（Google OAuth を使わない場合は値はそのままでOK）:
+
+```env
+GOOGLE_OAUTH_CLIENT_ID=          # Google OAuth を使う場合のみ
+GOOGLE_OAUTH_CLIENT_SECRET=      # Google OAuth を使う場合のみ
+HWHUB_OAUTH_STATE_SECRET=        # Google OAuth を使う場合のみ
+```
+
+VS Code の場合、`.vscode/launch.json` の `envFile` に `.env` を指定します。
+
+```json
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "HwHub Backend",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}
+```
+
+---
+### 5. Backend の起動
+
+**VS Code の場合**
+
+`実行とデバッグ` パネルから `HwHub Backend` を選択して起動。
+
+**コマンドラインの場合**
+
+```bash
+cd hw-hub-backend
+./gradlew bootRun
+```
+
+起動確認: `http://localhost:8080/actuator/health` が `{"status":"UP"}` を返すこと。
+
+Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+
+---
+
+### 6. Frontend の起動
+
+```bash
+cd hw-hub-frontend
+npm install
+npm run dev
+```
+
+ブラウザで `http://localhost:5173` にアクセス。
+
+---
+
+### 7. 動作確認（テストアカウント）
+
+以下のテストアカウントでログインできます（パスワード共通: `admin`）。
+
+| メールアドレス | 説明 |
+|---|---|
+| `home.owner@example.com` | 自宅オーナー（2世帯に所属） |
+| `home.member@example.com` | 自宅メンバー |
+| `parent.owner@example.com` | 実家オーナー |
+| `parent.member1@example.com` 〜 `parent.member4@example.com` | 実家メンバー |
+
+ユーザー間の詳細な関係性は `hw-hub-database/flyway/sql-test/R__test_household.sql` を参照。
+
+管理画面へのアクセスには ADMIN または SUPPORT ロールが必要です。  
+ロールの付与は管理画面（`/admin/roles`）またはデータベースの `m_user_role` テーブルから直接行ってください。
+
+---
+
+### 8. バッチの起動（オプション）
+
+AI 返信バッチを動かす場合の追加手順です。
+
+```bash
+cd hw-hub-batch
+cp .env.example .env
+```
+
+`.env` に Claude API キーを設定します。
+
+```env
+CLAUDE_API_KEY=your-claude-api-key
+```
+
+**VS Code の場合**
+
+`.vscode/launch.json` に以下のように設定します。
+
+```json
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "HwHub Batch",
+      "envFile": "${workspaceFolder}/.env",
+      "args": "--spring.batch.job.name=inquiryAiReplyJob"
+    }
+  ]
+}
+```
+
+`実行とデバッグ` パネルから `HwHub Batch` を選択して起動。
+
+**コマンドラインの場合**
+
+```bash
+./gradlew bootRun --args='--spring.batch.job.name=inquiryAiReplyJob'
+```
+
+---
+
+### ローカル環境のサービス一覧
+
+| サービス | URL | 用途 |
+|---|---|---|
+| Frontend | http://localhost:5173 | アプリ本体 |
+| Backend API | http://localhost:8080 | REST API |
+| Swagger UI | http://localhost:8080/swagger-ui/index.html | API ドキュメント |
+| Mailhog | http://localhost:8025 | メール確認（メール認証が有効な場合） |
+| LocalStack | http://localhost:4566 | S3 ローカルエミュレーター |
+
+---
+
 ## Development
 
 各リポジトリにそれぞれの詳細を記載したREADMEファイルがあります。
