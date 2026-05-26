@@ -18,6 +18,7 @@ Housework Hub（HwHub）は、家庭内の家事・買い物・メンバー管�
 - **hw-hub-backend** : メインAPI（Spring Boot / MyBatis / MySQL）
 - **hw-hub-batch** : 定期バッチ処理（Spring Batch / ECS Fargate）
 - **hw-hub-frontend** : フロントエンド（Vue 3 + Vite + TypeScript）
+- **hw-hub-mobile** : モバイルアプリ（Flutter / Riverpod / Dio）
 - **hw-hub-database** : DBスキーマ・Flywayマイグレーション管理
 - **hw-hub-infra** : AWSインフラ（Terraform）
 - **hw-hub-knowledge** : AIサポートナレッジ（S3同期）
@@ -184,6 +185,13 @@ flowchart LR
 - Tailwind CSS
 - vue-i18n
 
+### Mobile
+- Flutter 3.x
+- Dart 3.x
+- Riverpod 2.x
+- go_router 14.x
+- Dio 5.x
+
 ### Infrastructure
 - AWS ECS Fargate
 - Application Load Balancer（Ephemeral）
@@ -204,6 +212,7 @@ flowchart LR
 | [hw-hub-backend](https://github.com/ryokkon624/hw-hub-backend)   | REST API / authentication / business logic |
 | [hw-hub-batch](https://github.com/ryokkon624/hw-hub-batch)       | scheduled batch processing |
 | [hw-hub-frontend](https://github.com/ryokkon624/hw-hub-frontend) | Web UI |
+| [hw-hub-mobile](https://github.com/ryokkon624/hw-hub-mobile)     | iOS / Android mobile app |
 | [hw-hub-database](https://github.com/ryokkon624/hw-hub-database) | Flyway database schema |
 | [hw-hub-infra](https://github.com/ryokkon624/hw-hub-infra) | Terraform infrastructure |
 | [hw-hub-knowledge](https://github.com/ryokkon624/hw-hub-knowledge) | AI support knowledge base (S3 sync) |
@@ -216,6 +225,7 @@ flowchart LR
 flowchart LR
 
 Frontend["hw-hub-frontend"]
+Mobile["hw-hub-mobile"]
 Backend["hw-hub-backend"]
 Batch["hw-hub-batch"]
 DB["hw-hub-database"]
@@ -223,6 +233,7 @@ Infra["hw-hub-infra"]
 Knowledge["hw-hub-knowledge"]
 
 Frontend --> Backend
+Mobile --> Backend
 Backend --> DB
 Batch --> DB
 Knowledge --> Batch
@@ -428,7 +439,26 @@ npm run dev
 
 ---
 
-### 7. 動作確認（テストアカウント）
+### 7. Mobile の起動（オプション）
+
+iOS / Android モバイルアプリを動かす場合の手順です。Flutter SDK がインストールされていることが前提です。
+
+```bash
+cd hw-hub-mobile
+
+# 依存パッケージ取得
+flutter pub get
+
+# アプリ起動（エミュレータ or 接続済み実機）
+flutter run
+```
+
+> バックエンドの URL はデフォルト `http://10.0.2.2:8080`（Android エミュレータから見たホスト）。  
+> 詳細は [mobile_README.md](https://github.com/ryokkon624/hw-hub-mobile/blob/main/mobile_README.md) を参照。
+
+---
+
+### 8. 動作確認（テストアカウント）
 
 以下のテストアカウントでログインできます（パスワード共通: `admin`）。
 
@@ -446,7 +476,7 @@ npm run dev
 
 ---
 
-### 8. バッチの起動（オプション）
+### 9. バッチの起動（オプション）
 
 AI 返信バッチを動かす場合の追加手順です。
 
@@ -507,6 +537,7 @@ CLAUDE_API_KEY=your-claude-api-key
 - [backend_README.md](https://github.com/ryokkon624/hw-hub-backend/blob/main/backend_README.md)
 - [batch_README.md](https://github.com/ryokkon624/hw-hub-batch/blob/main/batch_README.md)
 - [frontend_README.md](https://github.com/ryokkon624/hw-hub-frontend/blob/main/frontend_README.md)
+- [mobile_README.md](https://github.com/ryokkon624/hw-hub-mobile/blob/main/mobile_README.md)
 - [database_README.md](https://github.com/ryokkon624/hw-hub-database/blob/main/database_README.md)
 - [infra_README.md](https://github.com/ryokkon624/hw-hub-infra/blob/main/infra_README.md)
 
@@ -596,7 +627,6 @@ flowchart LR
 
 Planned improvements:
 
-- mobile application (Capacitor)
 - analytics dashboard
 
 ---
